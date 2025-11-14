@@ -33,13 +33,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install backend dependencies
         working-directory: backend-sam
-        run: |
-          cd ../backend-sam
-          npm install
+        run: npm install
 
       - name: SAM build
         working-directory: backend-sam
@@ -57,9 +54,7 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: |
-          cd ../frontend
-          npm install
+        run: npm install
 
       - name: Configure frontend environment
         working-directory: frontend
