@@ -1,0 +1,192 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Serverless backend for the Bill Printing app. Provides REST APIs backed by
+  Lambda and DynamoDB.
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 10
+    MemorySize: 256
+    Handler: src/index.handler
+    CodeUri: .
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref BillingTable
+        STAGE_NAME: !Ref ApiStageName
+        BILL_TTL_DAYS: !Ref BillTtlDays
+
+Parameters:
+  ApiStageName:
+    Type: String
+    Default: prod
+    Description: API Gateway stage for deployment (e.g. dev, prod)
+
+  BillingTableName:
+    Type: String
+    Default: BillingAppTable
+    Description: DynamoDB table name
+
+  BillTtlDays:
+    Type: Number
+    Default: 30
+    Description: Number of days to retain bills/items before automatic expiry
+
+Resources:
+  BillingApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref ApiStageName
+      Cors:
+        AllowOrigin: "'*'"
+        AllowHeaders: "'*'"
+        AllowMethods: "'OPTIONS,GET,POST,PUT,DELETE'"
+      EndpointConfiguration: REGIONAL
+
+  BillingServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Handles all REST endpoints for billing workflows
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BillingTable
+      Events:
+        CustomersList:
+          Type: Api
+          Properties:
+            Path: /customers
+            Method: get
+            RestApiId: !Ref BillingApi
+        CustomersCreate:
+          Type: Api
+          Properties:
+            Path: /customers
+            Method: post
+            RestApiId: !Ref BillingApi
+        CustomerDelete:
+          Type: Api
+          Properties:
+            Path: /customers/{customerId}
+            Method: delete
+            RestApiId: !Ref BillingApi
+        CustomerGet:
+          Type: Api
+          Properties:
+            Path: /customers/{customerId}
+            Method: get
+            RestApiId: !Ref BillingApi
+        CustomerBillsList:
+          Type: Api
+          Properties:
+            Path: /customers/{customerId}/bills
+            Method: get
+            RestApiId: !Ref BillingApi
+        CustomerBillsCreate:
+          Type: Api
+          Properties:
+            Path: /customers/{customerId}/bills
+            Method: post
+            RestApiId: !Ref BillingApi
+        BillGet:
+          Type: Api
+          Properties:
+            Path: /bills/{billId}
+            Method: get
+            RestApiId: !Ref BillingApi
+        BillDelete:
+          Type: Api
+          Properties:
+            Path: /bills/{billId}
+            Method: delete
+            RestApiId: !Ref BillingApi
+        BillUpsert:
+          Type: Api
+          Properties:
+            Path: /bills/{billId}
+            Method: put
+            RestApiId: !Ref BillingApi
+        BillPrint:
+          Type: Api
+          Properties:
+            Path: /bills/{billId}/pdf
+            Method: get
+            RestApiId: !Ref BillingApi
+
+  BillingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref BillingTableName
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: gsi1pk
+          AttributeType: S
+        - AttributeName: gsi1sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: gsi1
+          KeySchema:
+            - AttributeName: gsi1pk
+              KeyType: HASH
+            - AttributeName: gsi1sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ['*']
+            AllowedMethods: ['GET', 'HEAD']
+            AllowedHeaders: ['*']
+            MaxAge: 3600
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowPublicReadForWebsite
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${FrontendBucket.Arn}/*'
+
+Outputs:
+  ApiUrl:
+    Description: Invoke URL for the deployed API Gateway stage
+    Value: !Sub 'https://${BillingApi}.execute-api.${AWS::Region}.amazonaws.com/${ApiStageName}'
+  DynamoTableName:
+    Description: DynamoDB table that stores customers, bills and items
+    Value: !Ref BillingTable
+  FrontendBucketName:
+    Description: S3 bucket hosting the React frontend
+    Value: !Ref FrontendBucket
+  FrontendWebsiteUrl:
+    Description: Public website endpoint for the frontend bucket
+    Value: !GetAtt FrontendBucket.WebsiteURL
+

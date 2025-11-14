@@ -1,0 +1,94 @@
+name: Deploy Application
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-south-1
+  SAM_STACK_NAME: bill-printing-stack
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          # Uses OpenID Connect; configure this role ARN in AWS beforehand
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install backend dependencies
+        working-directory: backend-sam
+        run: npm install
+
+      - name: SAM build
+        working-directory: backend-sam
+        run: sam build --use-container
+
+      - name: SAM deploy
+        working-directory: backend-sam
+        run: |
+          sam deploy \
+            --stack-name ${{ env.SAM_STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --no-confirm-changeset \
+            --resolve-s3
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Configure frontend environment
+        working-directory: frontend
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.SAM_STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
+            --output text)
+          
+          if [ -z "$API_URL" ]; then
+            echo "Failed to resolve ApiUrl from stack outputs"
+            exit 1
+          fi
+          
+          echo "VITE_API_BASE_URL=$API_URL" >> .env.production
+          echo "Configured API URL: $API_URL"
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload frontend dist to S3
+        working-directory: frontend
+        run: |
+          BUCKET_NAME=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.SAM_STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='FrontendBucketName'].OutputValue" \
+            --output text)
+
+          if [ -z "$BUCKET_NAME" ]; then
+            echo "Failed to resolve FrontendBucketName from stack outputs"
+            exit 1
+          fi
+
+          aws s3 sync dist/ "s3://$BUCKET_NAME/" --delete
+
