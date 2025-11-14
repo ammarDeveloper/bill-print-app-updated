@@ -37,6 +37,7 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: backend-sam
+        run: cd backend-sam
         run: npm install
 
       - name: SAM build
@@ -55,6 +56,7 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: frontend
+        run: cd ../frontend
         run: npm install
 
       - name: Configure frontend environment
