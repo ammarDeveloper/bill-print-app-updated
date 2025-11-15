@@ -45,3 +45,16 @@ export const getBillStatus = (bill) => {
 export const countItems = (bill) =>
   bill?.items?.reduce((acc, item) => acc + Number(item.quantity || 0), 0) ?? 0;
 
+/**
+ * Check if a customer has any pending bills
+ * @param {Array} bills - Array of bills for a customer
+ * @returns {boolean} - True if customer has at least one pending bill
+ */
+export const hasPendingBills = (bills) => {
+  if (!Array.isArray(bills) || bills.length === 0) return false;
+  return bills.some((bill) => {
+    const status = getBillStatus(bill);
+    return status === 'pending';
+  });
+};
+

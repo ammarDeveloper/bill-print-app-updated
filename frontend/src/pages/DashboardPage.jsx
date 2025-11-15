@@ -1,22 +1,39 @@
 import { useMemo, useState } from 'react';
+import clsx from 'clsx';
 import { IconSearch, IconUserPlus } from '../ui/icons.jsx';
 import CustomerCard from '../components/customers/CustomerCard.jsx';
 import NewCustomerForm from '../components/customers/NewCustomerForm.jsx';
 import EmptyState from '../components/common/EmptyState.jsx';
 import { useAppState } from '../state/AppStateProvider.jsx';
+import { hasPendingBills } from '../utils/formatters.js';
 
 const DashboardPage = () => {
-  const { customers, loading } = useAppState();
+  const { customers, customerBills, loading } = useAppState();
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [showOnlyPending, setShowOnlyPending] = useState(false);
 
   const filteredCustomers = useMemo(() => {
+    let result = customers;
+
+    // Filter by search term
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return customers;
-    return customers.filter(
-      (customer) => customer.name.toLowerCase().includes(term) || customer.phone.toLowerCase().includes(term)
-    );
-  }, [customers, searchTerm]);
+    if (term) {
+      result = result.filter(
+        (customer) => customer.name.toLowerCase().includes(term) || customer.phone.toLowerCase().includes(term)
+      );
+    }
+
+    // Filter by pending bills
+    if (showOnlyPending) {
+      result = result.filter((customer) => {
+        const bills = customerBills[customer.id] ?? [];
+        return hasPendingBills(bills);
+      });
+    }
+
+    return result;
+  }, [customers, searchTerm, showOnlyPending, customerBills]);
 
   const isLoading = loading.customers;
 
@@ -43,14 +60,24 @@ const DashboardPage = () => {
               onChange={(event) => setSearchTerm(event.target.value)}
             />
           </div>
-          <button
-            type="button"
-            className="btn btn-primary glimmer d-inline-flex align-items-center gap-2"
-            onClick={() => setShowNewCustomer((prev) => !prev)}
-          >
-            <IconUserPlus />
-            {showNewCustomer ? 'Close form' : 'New customer'}
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <button
+              type="button"
+              className={clsx('btn', showOnlyPending ? 'btn-primary' : 'btn-outline-light', 'glimmer')}
+              onClick={() => setShowOnlyPending((prev) => !prev)}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              {showOnlyPending ? '✓ Pending only' : 'Show pending'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary glimmer d-inline-flex align-items-center gap-2"
+              onClick={() => setShowNewCustomer((prev) => !prev)}
+            >
+              <IconUserPlus />
+              {showNewCustomer ? 'Close form' : 'New customer'}
+            </button>
+          </div>
         </div>
 
         {showNewCustomer && (
@@ -71,11 +98,19 @@ const DashboardPage = () => {
         </div>
       ) : filteredCustomers.length === 0 ? (
         <EmptyState
-          title={searchTerm ? 'No matches found' : 'Your first customer awaits'}
+          title={
+            showOnlyPending
+              ? 'No customers with pending bills'
+              : searchTerm
+                ? 'No matches found'
+                : 'Your first customer awaits'
+          }
           description={
-            searchTerm
-              ? `We couldn’t find anyone for “${searchTerm}”. Try adjusting the spelling or searching by phone number.`
-              : 'Create a customer profile to begin tracking laundry orders and payments.'
+            showOnlyPending
+              ? 'All customers have completed their payments, or bills haven\'t been loaded yet. View a customer\'s timeline to load their bills.'
+              : searchTerm
+                ? `We couldn't find anyone for "${searchTerm}". Try adjusting the spelling or searching by phone number.`
+                : 'Create a customer profile to begin tracking laundry orders and payments.'
           }
           action={
             !showNewCustomer && (

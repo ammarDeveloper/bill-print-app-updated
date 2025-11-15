@@ -1,10 +1,13 @@
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { useAppState } from '../../state/AppStateProvider.jsx';
+import { hasPendingBills } from '../../utils/formatters.js';
 
 const CustomerCard = ({ customer, animationDelay = 0 }) => {
   const navigate = useNavigate();
-  const { deleteCustomer } = useAppState();
+  const { deleteCustomer, customerBills } = useAppState();
+  const bills = customerBills[customer.id] ?? [];
+  const hasPending = hasPendingBills(bills);
 
   const handleOpen = () => {
     navigate(`/customers/${customer.id}`);
@@ -32,7 +35,14 @@ const CustomerCard = ({ customer, animationDelay = 0 }) => {
 
       <div>
         <p className="customer-card__phone">{customer.phone}</p>
-        <span className="customer-meta-chip">Active customer</span>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="customer-meta-chip">Active customer</span>
+          {hasPending && (
+            <span className="status-badge status-badge--pending" style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}>
+              Pending
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="customer-card__actions">

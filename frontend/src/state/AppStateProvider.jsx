@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 const envBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
-const rawBaseUrl = envBaseUrl.trim() || 'https://ylkv0jns85.execute-api.ap-south-1.amazonaws.com/prod';
+const rawBaseUrl = (envBaseUrl.trim() || 'https://c426a25my6.execute-api.ap-south-1.amazonaws.com/prod').trim();
 const API_BASE_URL = rawBaseUrl.replace(/\/$/, '');
 
 const randomId = () => {
@@ -67,7 +67,9 @@ export const AppStateProvider = ({ children }) => {
   const [loading, setLoading] = useState({ customers: false, bills: {}, bill: false });
 
   const apiFetch = useCallback(async (path, { method = 'GET', body } = {}) => {
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = { 
+      'Content-Type': 'application/json'
+    };
 
     const response = await fetch(`${API_BASE_URL}${path}`, {
       method,
@@ -99,6 +101,11 @@ export const AppStateProvider = ({ children }) => {
         const items = (data?.items ?? []).map(normalizeCustomer);
         setCustomers(items);
         return items;
+      } catch (error) {
+        console.error('Failed to load customers:', error);
+        // Don't throw - just set empty array so app can still render
+        setCustomers([]);
+        return [];
       } finally {
         setLoading((prev) => ({ ...prev, customers: false }));
       }

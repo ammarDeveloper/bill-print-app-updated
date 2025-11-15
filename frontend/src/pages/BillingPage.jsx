@@ -261,7 +261,7 @@ const BillingPage = () => {
           <p className="company-address">
             &quot;NANDAWAT COMPLEX&quot; #7, RMS Bus Stop, Near Bharath Petrol Bunk, Sanjaynage, Bengaluru - 560094
           </p>
-          <p className="company-phone">+91-99024 70697, +91-90849 04211</p>
+          <p className="company-phone">+91-99024 70697, +91-80770 41575</p>
         </div>
         <div className="bill-meta-row">
           <div className="bill-meta-number">

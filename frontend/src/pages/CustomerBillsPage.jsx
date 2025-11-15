@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import clsx from 'clsx';
 import StatusBadge from '../components/common/StatusBadge.jsx';
 import EmptyState from '../components/common/EmptyState.jsx';
 import { useAppState } from '../state/AppStateProvider.jsx';
-import { formatDisplayDateTime, formatCurrency } from '../utils/formatters.js';
+import { formatDisplayDateTime, formatCurrency, getBillStatus } from '../utils/formatters.js';
+import { IconSearch } from '../ui/icons.jsx';
 
 const CustomerBillsPage = () => {
   const { customerId } = useParams();
@@ -21,6 +23,31 @@ const CustomerBillsPage = () => {
   const billsForCustomer = useMemo(() => customerBills[customerId] ?? [], [customerBills, customerId]);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'pending', 'paid', 'empty'
+
+  const filteredBills = useMemo(() => {
+    let result = billsForCustomer;
+
+    // Filter by search term
+    const term = searchTerm.trim().toLowerCase();
+    if (term) {
+      result = result.filter((bill) => {
+        const billNumber = bill.id.slice(-6).toUpperCase();
+        return billNumber.toLowerCase().includes(term);
+      });
+    }
+
+    // Filter by status
+    if (statusFilter !== 'all') {
+      result = result.filter((bill) => {
+        const status = getBillStatus(bill);
+        return status === statusFilter;
+      });
+    }
+
+    return result;
+  }, [billsForCustomer, searchTerm, statusFilter]);
 
   useEffect(() => {
     if (!customerId) return;
@@ -101,6 +128,58 @@ const CustomerBillsPage = () => {
             </button>
           </div>
 
+          {billsForCustomer.length > 0 && (
+            <>
+              <div className="search-bar" style={{ marginTop: '1.5rem', marginBottom: '1rem' }}>
+                <span className="search-bar__icon" aria-hidden="true">
+                  <IconSearch />
+                </span>
+                <input
+                  type="search"
+                  className="form-control"
+                  placeholder="Search bills by bill number"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                />
+              </div>
+              
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                <button
+                  type="button"
+                  className={clsx('btn', statusFilter === 'all' ? 'btn-primary' : 'btn-outline-light', 'glimmer')}
+                  onClick={() => setStatusFilter('all')}
+                  style={{ fontSize: '0.875rem', padding: '0.5rem 0.75rem' }}
+                >
+                  All bills
+                </button>
+                <button
+                  type="button"
+                  className={clsx('btn', statusFilter === 'pending' ? 'btn-primary' : 'btn-outline-light', 'glimmer')}
+                  onClick={() => setStatusFilter('pending')}
+                  style={{ fontSize: '0.875rem', padding: '0.5rem 0.75rem' }}
+                >
+                  Pending payments
+                </button>
+                <button
+                  type="button"
+                  className={clsx('btn', statusFilter === 'paid' ? 'btn-primary' : 'btn-outline-light', 'glimmer')}
+                  onClick={() => setStatusFilter('paid')}
+                  style={{ fontSize: '0.875rem', padding: '0.5rem 0.75rem' }}
+                >
+                  Payment done
+                </button>
+                <button
+                  type="button"
+                  className={clsx('btn', statusFilter === 'empty' ? 'btn-primary' : 'btn-outline-light', 'glimmer')}
+                  onClick={() => setStatusFilter('empty')}
+                  style={{ fontSize: '0.875rem', padding: '0.5rem 0.75rem' }}
+                >
+                  No transactions
+                </button>
+              </div>
+            </>
+          )}
+
           {error && (
             <div className="inline-alert" role="alert">
               {error}
@@ -127,9 +206,49 @@ const CustomerBillsPage = () => {
                 </button>
               }
             />
+          ) : filteredBills.length === 0 ? (
+            <EmptyState
+              title={
+                statusFilter !== 'all'
+                  ? `No ${statusFilter === 'pending' ? 'pending payment' : statusFilter === 'paid' ? 'paid' : 'empty'} bills`
+                  : searchTerm
+                    ? 'No bills found'
+                    : 'No bills yet'
+              }
+              description={
+                statusFilter !== 'all'
+                  ? `No bills found with ${statusFilter === 'pending' ? 'pending payments' : statusFilter === 'paid' ? 'payment done status' : 'no transactions'}. ${searchTerm ? `Also, no bills match "${searchTerm}".` : ''}`
+                  : searchTerm
+                    ? `No bills found matching "${searchTerm}". Try a different bill number.`
+                    : 'Create a bill to start tracking garments and payments for this customer.'
+              }
+              action={
+                searchTerm || statusFilter !== 'all' ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary glimmer"
+                    onClick={() => {
+                      setSearchTerm('');
+                      setStatusFilter('all');
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-primary glimmer"
+                    onClick={handleCreateBill}
+                    disabled={creating}
+                  >
+                    {creating ? 'Creating…' : 'Create first bill'}
+                  </button>
+                )
+              }
+            />
           ) : (
             <div className="page-section">
-              {billsForCustomer.map((bill, index) => (
+              {filteredBills.map((bill, index) => (
                 <article
                   key={bill.id}
                   className="bill-card animate-fade-up"

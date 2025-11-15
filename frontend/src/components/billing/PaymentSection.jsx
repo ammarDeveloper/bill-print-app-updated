@@ -52,6 +52,7 @@ const PaymentSection = ({
   const effectivePayedAmount =
     Number.isFinite(paymentInputNumber) && paymentInput !== '' ? payedAmount + paymentInputNumber : payedAmount;
   const balanceDue = Math.max(0, totalAmount - effectivePayedAmount);
+  const maxPaymentAmount = Math.max(0, totalAmount - payedAmount);
   const adjustmentsLocked = disableAdjustments;
   const itemsAvailable = Boolean(hasItems);
   const controlsLocked = adjustmentsLocked || savingPayment || isSaving || !itemsAvailable;
@@ -74,6 +75,16 @@ const PaymentSection = ({
     setMessage({ type: 'success', text: 'Due date updated.' });
   };
 
+  const handlePaymentInputChange = (event) => {
+    const value = event.target.value;
+    setPaymentInput(value);
+    
+    // Clear validation messages when user starts typing
+    if (message?.type === 'danger' || message?.type === 'info') {
+      setMessage(null);
+    }
+  };
+
   const handlePaymentSubmit = async (event) => {
     event.preventDefault();
     if (!itemsAvailable) {
@@ -89,8 +100,8 @@ const PaymentSection = ({
       setMessage({ type: 'danger', text: 'Enter a valid payment amount.' });
       return;
     }
-    if (amount > totalAmount) {
-      setMessage({ type: 'danger', text: 'Payment cannot exceed total amount.' });
+    if (amount > maxPaymentAmount) {
+      setMessage({ type: 'danger', text: `Payment cannot exceed balance due (${formatCurrency(maxPaymentAmount)}).` });
       return;
     }
 
@@ -221,10 +232,12 @@ const PaymentSection = ({
             id="paymentAmount"
             type="number"
             min="0"
+            max={maxPaymentAmount}
+            step="0.01"
             className="form-control"
-            placeholder="Enter amount received now"
+            placeholder={`Enter amount (max: ${formatCurrency(maxPaymentAmount)})`}
             value={paymentInput}
-            onChange={(event) => setPaymentInput(event.target.value)}
+            onChange={handlePaymentInputChange}
             disabled={controlsLocked}
           />
           <button type="submit" className="btn btn-success glimmer" disabled={controlsLocked || savingPayment}>
