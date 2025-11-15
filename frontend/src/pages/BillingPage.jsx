@@ -338,7 +338,7 @@ const BillingPage = () => {
             <h3>Terms &amp; Conditions</h3>
             <p className="pi-terms__last">Original acknowledgement / messages needs to be presented at the time of taking delivery of Garments.</p>
             <p className="pi-terms__last">We are not Responsible for fastness / running of colors / shrinkage / damage to Embellishments.</p>
-            <p className="pi-terms__last">We will not be responsible if the garment is not collected within 3 months from the date of reving.</p>
+            <p className="pi-terms__last">We will not be responsible if the garment is not collected within 1 months from the date of reving.</p>
           </div>
           <div className="totals">
             <p>

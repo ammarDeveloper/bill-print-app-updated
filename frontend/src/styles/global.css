@@ -1418,7 +1418,7 @@ label {
   .print-template .print-items td {
     border: 1px solid #000;
     padding: 0.5mm 2mm;
-    font-size: 0.82rem;
+    font-size: 1rem;
     text-align: left;
   }
 
@@ -1576,6 +1576,7 @@ label {
 
   .pi-terms__last {
     margin-bottom: 0;
+    font-size: 0.7rem;
   }
  
    .pi-summary-box p {
