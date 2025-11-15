@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 const envBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
-const rawBaseUrl = (envBaseUrl.trim() || 'https://cbls0rj8t3.execute-api.ap-south-1.amazonaws.com/prod').trim();
+const rawBaseUrl = (envBaseUrl.trim() || '/api/').trim();
 const API_BASE_URL = rawBaseUrl.replace(/\/$/, '');
 
 const randomId = () => {
