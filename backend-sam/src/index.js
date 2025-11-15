@@ -10,6 +10,7 @@ import {
   QueryCommand
 } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
+import { createHash, randomBytes } from 'crypto';
 
 /**
  * Lambda handler stub for the serverless Bill Printing API (Node.js).
@@ -61,6 +62,78 @@ const chunkArray = (array, size) => {
 };
 
 const computeExpiresAt = () => Math.floor(Date.now() / 1000) + BILL_TTL_SECONDS;
+
+// Auth constants
+const SESSION_DURATION_SECONDS = 24 * 60 * 60; // 24 hours
+const VALID_PASSCODE = process.env.ADMIN_PASSCODE;
+
+if (!VALID_PASSCODE) {
+  console.error('ERROR: ADMIN_PASSCODE environment variable is not set. Login will be disabled.');
+}
+
+const generateSessionToken = () => {
+  return randomBytes(32).toString('hex');
+};
+
+const hashToken = (token) => {
+  return createHash('sha256').update(token).digest('hex');
+};
+
+const computeSessionExpiresAt = () => Math.floor(Date.now() / 1000) + SESSION_DURATION_SECONDS;
+
+const getSessionToken = (event) => {
+  const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+  if (authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  return null;
+};
+
+const validateSession = async (sessionToken) => {
+  if (!sessionToken) return null;
+  
+  const tokenHash = hashToken(sessionToken);
+  try {
+    const result = await docClient.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: { pk: 'SESSION', sk: `TOKEN#${tokenHash}` }
+      })
+    );
+    
+    if (!result.Item) return null;
+    
+    const expiresAt = result.Item.expiresAt;
+    const now = Math.floor(Date.now() / 1000);
+    
+    if (expiresAt && expiresAt < now) {
+      // Session expired, delete it
+      await docClient.send(
+        new DeleteCommand({
+          TableName: TABLE_NAME,
+          Key: { pk: 'SESSION', sk: `TOKEN#${tokenHash}` }
+        })
+      ).catch(() => {});
+      return null;
+    }
+    
+    return result.Item;
+  } catch (error) {
+    console.error('Session validation error:', error);
+    return null;
+  }
+};
+
+const requireAuth = async (event) => {
+  const sessionToken = getSessionToken(event);
+  const session = await validateSession(sessionToken);
+  
+  if (!session) {
+    throw Object.assign(new Error('Unauthorized'), { statusCode: 401 });
+  }
+  
+  return session;
+};
 
 const normalizeItems = (items = []) => {
   if (!Array.isArray(items)) {
@@ -293,9 +366,92 @@ const normalizeBillPayload = (body) => {
 
 // Auth & session -----------------------------------------------------------
 
+addRoute('POST', '/auth/login', async (event) => {
+  const body = parseBody(event);
+  const passcode = body?.passcode?.trim();
+  
+  if (!passcode) {
+    return buildResponse(400, { message: 'Passcode is required' });
+  }
+  
+  // Check if passcode is configured
+  if (!VALID_PASSCODE) {
+    console.error('Login attempt failed: ADMIN_PASSCODE not configured');
+    return buildResponse(503, { message: 'Authentication service is not configured. Please contact administrator.' });
+  }
+  
+  // Validate passcode
+  if (passcode !== VALID_PASSCODE) {
+    return buildResponse(401, { message: 'Invalid passcode' });
+  }
+  
+  // Create session
+  const sessionToken = generateSessionToken();
+  const tokenHash = hashToken(sessionToken);
+  const expiresAt = computeSessionExpiresAt();
+  const createdAt = new Date().toISOString();
+  
+  await docClient.send(
+    new PutCommand({
+      TableName: TABLE_NAME,
+      Item: {
+        pk: 'SESSION',
+        sk: `TOKEN#${tokenHash}`,
+        sessionToken: tokenHash,
+        username: 'admin',
+        createdAt,
+        expiresAt,
+        entityType: 'SESSION'
+        // Note: expiresAt is used as TTL attribute for automatic cleanup
+      }
+    })
+  );
+  
+  return buildResponse(200, {
+    token: sessionToken,
+    expiresAt,
+    username: 'admin'
+  });
+});
+
+addRoute('POST', '/auth/logout', async (event) => {
+  try {
+    const session = await requireAuth(event);
+    const tokenHash = hashToken(getSessionToken(event));
+    
+    await docClient.send(
+      new DeleteCommand({
+        TableName: TABLE_NAME,
+        Key: { pk: 'SESSION', sk: `TOKEN#${tokenHash}` }
+      })
+    );
+    
+    return buildResponse(200, { message: 'Logged out successfully' });
+  } catch (error) {
+    if (error.statusCode === 401) {
+      return buildResponse(401, { message: 'Unauthorized' });
+    }
+    throw error;
+  }
+});
+
+addRoute('GET', '/auth/verify', async (event) => {
+  try {
+    const session = await requireAuth(event);
+    return buildResponse(200, {
+      authenticated: true,
+      username: session.username,
+      expiresAt: session.expiresAt
+    });
+  } catch (error) {
+    return buildResponse(401, { authenticated: false, message: 'Unauthorized' });
+  }
+});
+
 // Customers ---------------------------------------------------------------
 
-addRoute('GET', '/customers', async () => {
+addRoute('GET', '/customers', async (event) => {
+  await requireAuth(event);
   const result = await docClient.send(
     new QueryCommand({
       TableName: TABLE_NAME,
@@ -316,6 +472,7 @@ addRoute('GET', '/customers', async () => {
 });
 
 addRoute('POST', '/customers', async (event) => {
+  await requireAuth(event);
   const body = parseBody(event);
   const name = body?.name?.trim();
   const phone = body?.phone?.trim();
@@ -378,6 +535,7 @@ addRoute('POST', '/customers', async (event) => {
 });
 
 addRoute('GET', '/customers/{customerId}', async (event) => {
+  await requireAuth(event);
   const customerId = event.pathParameters?.customerId;
   if (!customerId) {
     return buildResponse(400, { message: 'customerId path parameter is required' });
@@ -393,6 +551,7 @@ addRoute('GET', '/customers/{customerId}', async (event) => {
 });
 
 addRoute('DELETE', '/customers/{customerId}', async (event) => {
+  await requireAuth(event);
   const customerId = event.pathParameters?.customerId;
   if (!customerId) {
     return buildResponse(400, { message: 'customerId path parameter is required' });
@@ -441,6 +600,7 @@ addRoute('DELETE', '/customers/{customerId}', async (event) => {
 // Bills ------------------------------------------------------------------
 
 addRoute('GET', '/customers/{customerId}/bills', async (event) => {
+  await requireAuth(event);
   const customerId = event.pathParameters?.customerId;
   if (!customerId) {
     return buildResponse(400, { message: 'customerId path parameter is required' });
@@ -469,6 +629,7 @@ addRoute('GET', '/customers/{customerId}/bills', async (event) => {
 });
 
 addRoute('POST', '/customers/{customerId}/bills', async (event) => {
+  await requireAuth(event);
   const customerId = event.pathParameters?.customerId;
   if (!customerId) {
     badRequest('customerId path parameter is required');
@@ -553,6 +714,7 @@ addRoute('POST', '/customers/{customerId}/bills', async (event) => {
 });
 
 addRoute('PUT', '/bills/{billId}', async (event) => {
+  await requireAuth(event);
   const billId = event.pathParameters?.billId;
   if (!billId) {
     badRequest('billId path parameter is required');
@@ -687,6 +849,7 @@ addRoute('PUT', '/bills/{billId}', async (event) => {
 });
 
 addRoute('GET', '/bills/{billId}', async (event) => {
+  await requireAuth(event);
   const billId = event.pathParameters?.billId;
   if (!billId) {
     return buildResponse(400, { message: 'billId path parameter is required' });
@@ -714,52 +877,8 @@ addRoute('GET', '/bills/{billId}', async (event) => {
   });
 });
 
-addRoute('PUT', '/bills/{billId}', async (event) => {
-  const billId = event.pathParameters?.billId;
-  if (!billId) {
-    return buildResponse(400, { message: 'billId path parameter is required' });
-  }
-  const summary = await getBillSummary(billId);
-  const payload = normalizeBillPayload(parseBody(event));
-  const timestamp = new Date().toISOString();
-  const expiresAt = computeExpiresAt();
-
-  await deleteAllBillItems(billId);
-  await writeBillItems(billId, summary.customerId, payload.items, timestamp, expiresAt);
-
-  await docClient.send(
-    new PutCommand({
-      TableName: TABLE_NAME,
-      Item: {
-        pk: `CUSTOMER#${summary.customerId}`,
-        sk: `BILL#${billId}`,
-        billId,
-        customerId: summary.customerId,
-        totalAmount: payload.totalAmount,
-        payedAmount: payload.payedAmount,
-        dueDate: payload.dueDate,
-        createdAt: summary.createdAt,
-        updatedAt: timestamp,
-        expiresAt
-      }
-    })
-  );
-
-  return buildResponse(200, {
-    bill: {
-      billId,
-      customerId: summary.customerId,
-      totalAmount: payload.totalAmount,
-      payedAmount: payload.payedAmount,
-      dueDate: payload.dueDate,
-      createdAt: summary.createdAt,
-      updatedAt: timestamp
-    },
-    items: payload.items
-  });
-});
-
 addRoute('DELETE', '/bills/{billId}', async (event) => {
+  await requireAuth(event);
   const billId = event.pathParameters?.billId;
   if (!billId) {
     return buildResponse(400, { message: 'billId path parameter is required' });
@@ -780,6 +899,7 @@ addRoute('DELETE', '/bills/{billId}', async (event) => {
 });
 
 addRoute('GET', '/bills/{billId}/pdf', async (event) => {
+  await requireAuth(event);
   const billId = event.pathParameters?.billId;
   if (!billId) {
     return buildResponse(400, { message: 'billId path parameter is required' });

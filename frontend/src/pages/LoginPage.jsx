@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../state/AppStateProvider.jsx';
-import loginIllustration from '../assets/login-illustration.svg';
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { auth, login } = useAppState();
 
-  const [credentials, setCredentials] = useState({ username: '', password: '' });
+  const [passcode, setPasscode] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const from = location.state?.from?.pathname || '/dashboard';
@@ -20,19 +19,20 @@ const LoginPage = () => {
   }, [auth.isAuthenticated, from, navigate]);
 
   const handleChange = (event) => {
-    const { name, value } = event.target;
-    setCredentials((prev) => ({ ...prev, [name]: value }));
+    setPasscode(event.target.value);
+    setError('');
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setSubmitting(true);
     setError('');
-    const result = await login(credentials);
+    
+    const result = await login({ passcode });
     setSubmitting(false);
 
     if (!result.ok) {
-      setError(result.message ?? 'Login failed');
+      setError(result.message ?? 'Invalid passcode');
       return;
     }
 
@@ -40,76 +40,51 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light">
-      <div className="container">
-        <div className="row align-items-center justify-content-center g-4">
-          <div className="col-lg-5 text-center">
-            <img
-              src={loginIllustration}
-              alt="Laundry illustration"
-              className="img-fluid rounded shadow-sm"
-              loading="lazy"
-            />
+    <div className="login-page">
+      <div className="login-page__blur-orb login-page__blur-orb--1" />
+      <div className="login-page__blur-orb login-page__blur-orb--2" />
+      
+      <div className="login-page__container">
+        <div className="login-page__content animate-fade-in">
+          <div className="login-page__brand">
+            <h1 className="login-page__title">Laundry Room</h1>
+            <p className="login-page__subtitle">Billing Suite</p>
+            <p className="login-page__tagline">Enter your passcode to access the dashboard</p>
           </div>
-          <div className="col-lg-4">
-            <div className="card p-4">
-              <h1 className="h4 fw-bold text-center mb-3">Laundry Room Login</h1>
-              <p className="text-muted small text-center mb-4">
-                Enter your credentials to access the billing dashboard.
-              </p>
 
-              <form onSubmit={handleSubmit} className="d-grid gap-3">
-                <div>
-                  <label htmlFor="username" className="form-label fw-semibold">
-                    Username
-                  </label>
-                  <input
-                    id="username"
-                    name="username"
-                    type="text"
-                    className="form-control form-control-lg"
-                    placeholder="Laundry Room"
-                    autoComplete="username"
-                    value={credentials.username}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="password" className="form-label fw-semibold">
-                    Password
-                  </label>
-                  <input
-                    id="password"
-                    name="password"
-                    type="password"
-                    className="form-control form-control-lg"
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    value={credentials.password}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-
-                {error && (
-                  <div className="alert alert-danger py-2 mb-0" role="alert">
-                    {error}
-                  </div>
-                )}
-
-                <button type="submit" className="btn btn-brand btn-lg mt-2" disabled={submitting}>
-                  {submitting ? 'Signing in…' : 'Login'}
-                </button>
-              </form>
-
-              <p className="text-center small text-muted mt-4 mb-0">
-                Tip: default credentials are <strong>“Laundry Room”</strong> /{' '}
-                <strong>“LaundryRoom@123”</strong>
-              </p>
+          <form onSubmit={handleSubmit} className="login-page__form animate-fade-up--delayed">
+            <div className="login-page__input-group">
+              <label htmlFor="passcode" className="login-page__label">
+                Passcode
+              </label>
+              <input
+                id="passcode"
+                name="passcode"
+                type="password"
+                className="login-page__input"
+                placeholder="Enter passcode"
+                autoComplete="off"
+                value={passcode}
+                onChange={handleChange}
+                required
+                autoFocus
+              />
             </div>
-          </div>
+
+            {error && (
+              <div className="login-page__error" role="alert">
+                {error}
+              </div>
+            )}
+
+            <button 
+              type="submit" 
+              className="login-page__button" 
+              disabled={submitting || !passcode.trim()}
+            >
+              {submitting ? 'Signing in…' : 'Access Dashboard'}
+            </button>
+          </form>
         </div>
       </div>
     </div>

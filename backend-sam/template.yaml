@@ -16,6 +16,7 @@ Globals:
         TABLE_NAME: !Ref BillingTable
         STAGE_NAME: !Ref ApiStageName
         BILL_TTL_DAYS: !Ref BillTtlDays
+        ADMIN_PASSCODE: !Ref AdminPasscode
 
 Parameters:
   ApiStageName:
@@ -32,6 +33,12 @@ Parameters:
     Type: Number
     Default: 30
     Description: Number of days to retain bills/items before automatic expiry
+
+  AdminPasscode:
+    Type: String
+    Default: '7022537312'
+    Description: Passcode required for login authentication
+    NoEcho: true
 
 Resources:
   BillingApi:
@@ -53,6 +60,24 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref BillingTable
       Events:
+        AuthLogin:
+          Type: Api
+          Properties:
+            Path: /auth/login
+            Method: post
+            RestApiId: !Ref BillingApi
+        AuthLogout:
+          Type: Api
+          Properties:
+            Path: /auth/logout
+            Method: post
+            RestApiId: !Ref BillingApi
+        AuthVerify:
+          Type: Api
+          Properties:
+            Path: /auth/verify
+            Method: get
+            RestApiId: !Ref BillingApi
         CustomersList:
           Type: Api
           Properties:

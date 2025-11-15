@@ -6,11 +6,11 @@ const ProtectedRoute = ({ children }) => {
   const location = useLocation();
 
   if (!auth.isAuthenticated) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
+    // Redirect to login page with return location
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   return children;
 };
 
 export default ProtectedRoute;
-

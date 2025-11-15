@@ -1,7 +1,16 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
+import { useAppState } from '../../state/AppStateProvider.jsx';
 
 const AppLayout = () => {
+  const { auth, logout } = useAppState();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
+
   return (
     <div className="app-shell">
       <div className="app-blur-orb app-blur-orb--1" />
@@ -32,10 +41,18 @@ const AppLayout = () => {
                 <div className="app-avatar">
                   <span className="app-avatar__dot" aria-hidden="true" />
                   <div className="app-avatar__details">
-                    <span className="app-avatar__name">Laundry Room</span>
+                    <span className="app-avatar__name">{auth.username || 'Admin'}</span>
                     <span className="app-avatar__role">Billing Console</span>
                   </div>
                 </div>
+                <button
+                  onClick={handleLogout}
+                  className="btn btn-sm btn-outline-light ms-3"
+                  type="button"
+                  aria-label="Logout"
+                >
+                  Logout
+                </button>
               </div>
             </div>
           </div>
