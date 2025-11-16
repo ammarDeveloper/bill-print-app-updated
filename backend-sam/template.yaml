@@ -36,7 +36,6 @@ Parameters:
 
   AdminPasscode:
     Type: String
-    Default: '7022537312'
     Description: Passcode required for login authentication
     NoEcho: true
 

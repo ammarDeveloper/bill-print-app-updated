@@ -48,6 +48,7 @@ jobs:
           sam deploy \
             --stack-name ${{ env.SAM_STACK_NAME }} \
             --region ${{ env.AWS_REGION }} \
+            --parameter-overrides AdminPasscode=${{ secrets.ADMIN_PASSCODE }} \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
